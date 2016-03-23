@@ -37,7 +37,7 @@ Invocation
 Running the script is simple, with sensible defaults provided for 
 most command line options:
 
-'''
+```
 usage: rpi-neocam.py [-h] [-o DIR] [-n N] [-d N] [-l N] [-v] [-V]
 
 Raspberry Pi Camera and Adafruit NeoPixel controller script.
@@ -51,7 +51,7 @@ optional arguments:
  -l N, --length N      Length of capture in video mode. Default: 30.
  -v, --verbose         Verbose output
  -V, --version         show program's version number and exit
-'''
+```
 
 Example:
 
