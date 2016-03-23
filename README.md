@@ -55,12 +55,16 @@ optional arguments:
 
 Example:
 
-- sudo python rpi-neocam.py -o /home/pi -n 5 -d 1 -l 15
+```
+sudo python rpi-neocam.py -o /home/pi -n 5 -d 1 -l 15
+```
 
 Debug level logging is enabled by supplying the --verbose or -V
 command line parameter as follows:
 
-- sudo python rpi-neocam.py -o /home/pi -n 5 -d 1 -l 15 --verbose
+```
+sudo python rpi-neocam.py -o /home/pi -n 5 -d 1 -l 15 --verbose
+```
 
 License & Copyright
 -------------------
