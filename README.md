@@ -40,13 +40,13 @@ Raspberry Pi Camera and Adafruit NeoPixel controller script.
 
 optional arguments:
 
--h, --help            show this help message and exit
--o DIR, --output DIR  Output directory. Default: ~/Pictures.
--n N, --num N         Number of shots in still mode. Default: 5.
--d N, --delay N       Delay between shots in still mode. Default: 5.
--l N, --length N      Length of capture in video mode. Default: 30.
--v, --verbose         Verbose output
--V, --version         show program's version number and exit
+* -h, --help            show this help message and exit
+* -o DIR, --output DIR  Output directory. Default: ~/Pictures.
+* -n N, --num N         Number of shots in still mode. Default: 5.
+* -d N, --delay N       Delay between shots in still mode. Default: 5.
+* -l N, --length N      Length of capture in video mode. Default: 30.
+* -v, --verbose         Verbose output
+* -V, --version         show program's version number and exit
 
 Example:
 
