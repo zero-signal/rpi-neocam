@@ -34,6 +34,7 @@ import subprocess
 
 import RPi.GPIO as GPIO
 import picamera as CAM
+import neopixel as NEO
 
 VERSION='0.1'
 
@@ -51,6 +52,105 @@ class State():
     SHUTDOWN = 3
     CAMSTILL = 4
     CAMVIDEO = 5
+
+# class for interacting with Adafruit NeoPixels arranged as
+# stick(8) -> ring(16) -> stick(8)
+class LEDControl():
+
+    def __init__(self):
+        self.LED_COUNT      = 32
+        self.LED_PIN        = 18
+        self.LED_FREQ_HZ    = 800000
+        self.LED_DMA        = 5
+        self.LED_BRIGHTNESS = 10
+        self.LED_INVERT     = False
+        self.WAIT_MS        = 50
+
+        self.logger = logging.getLogger('rpi-neocam')
+
+        self.logger.debug('LEDs initialising.')
+
+        self.strip = NEO.Adafruit_NeoPixel(self.LED_COUNT, self.LED_PIN, self.LED_FREQ_HZ, self.LED_DMA, self.LED_INVERT, self.LED_BRIGHTNESS)
+        self.strip.begin()
+
+        self.logger.debug('LEDs initialised.')
+
+    def wipe(self, color):
+        for i in range(0,8):
+            self.strip.setPixelColor(i, color)
+            self.strip.show()
+            time.sleep(self.WAIT_MS/1000.0)
+
+        for i in range(0,8):
+            self.strip.setPixelColor(8 + i, color)
+            self.strip.setPixelColor(((self.strip.numPixels() - 8) - i - 1), color)
+            self.strip.show()
+            time.sleep(self.WAIT_MS/1000.0)
+
+        for i in range(24, self.strip.numPixels()):
+            self.strip.setPixelColor(i, color)
+            self.strip.show()
+            time.sleep(self.WAIT_MS/1000.0)
+
+    def ringWipe(self, color):
+        for i in range(0,8):
+            self.strip.setPixelColor(8 + i, color)
+            self.strip.setPixelColor(((self.strip.numPixels() - 8) - i - 1), color)
+            self.strip.show()
+            time.sleep(self.WAIT_MS/1000.0)
+
+    def stickSolid(self, color):
+        for i in range(0,8):
+            self.strip.setPixelColor(i, color)
+
+        for i in range(24, self.strip.numPixels()):
+            self.strip.setPixelColor(i, color)
+
+        self.strip.show()
+
+    def showTimer(self, secs):
+            self.clear()
+
+            if(secs >= 7):
+                color = NEO.Color(255,0,0)
+            elif (secs < 7 and secs >= 4):
+                color = NEO.Color(255,255,0)
+            else:
+                color = NEO.Color(0,255,0)
+
+            if(secs < 16):
+                for i in range(0,secs):
+                    self.strip.setPixelColor(8 + i, color)
+            else:
+                for i in range(8, 24):
+                    self.strip.setPixelColor(i, color)
+            
+            self.strip.show()
+
+    def clear(self):
+        c = NEO.Color(0,0,0)
+        for i in range(self.strip.numPixels()):
+            self.strip.setPixelColor(i,c)
+
+        self.strip.show()
+
+    def flashOn(self):
+        self.strip.setBrightness(100)
+        self.stickSolid(NEO.Color(255,255,255))
+
+    def flashOff(self):
+        self.stickSolid(NEO.Color(0,0,0))
+        self.strip.setBrightness(self.LED_BRIGHTNESS)
+   
+    def stillStart(self):
+        self.ringWipe(NEO.Color(255,0,0))
+        time.sleep(0.5)
+        self.clear()
+
+    def stillEnd(self):
+        self.ringWipe(NEO.Color(0,255,0))
+        time.sleep(0.5)
+        self.clear()
 
 # base class for a stoppable thread object
 class StoppableThread(threading.Thread):
@@ -112,7 +212,11 @@ class StillThread(CameraThread):
         fn = self.output + os.path.sep + self.get_timestamp() + '.jpg'
         logger.debug('Generating still image: %s.' % fn)
 
+        self.leds.flashOn()
+        time.sleep(0.1)
+
         self.camera.capture(fn)
+        self.leds.flashOff()
 
         logger.info('Generated still image: %s.' % fn)
 
@@ -122,19 +226,28 @@ class StillThread(CameraThread):
     def run(self):
         logger.debug('Still camera thread running.')
 
+        self.leds = LEDControl()
+        self.leds.stillStart()
+
         if(not self.is_init()):
             self.init()
 
         count = 0
         while((count != self.nshots) and not self.stopped()):
+
+            startTime = currTime = time.time()
+            while(currTime - startTime < self.delay):
+                self.leds.showTimer(int(self.delay - (currTime - startTime)))
+
+                time.sleep(0.01)
+                currTime = time.time()
+
             self.capture()
             count += 1
 
-            startTime = time.time()
-            while(time.time() - startTime < self.delay):
-                time.sleep(0.01)
-
+        self.leds.stillEnd()
         self.close()
+
         logger.debug('Still camera thread completed.')
 
 # video camera controller thread
@@ -184,7 +297,7 @@ class Controller():
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(btnPin, GPIO.IN)
 
-        self.state = State.IDLE
+        self.state = State.STARTUP
         self.logger = logging.getLogger('rpi-neocam')
 
         self.args = args
@@ -260,6 +373,13 @@ class Controller():
 
         # set up the GPIO key press detection
         GPIO.add_event_detect(self.btnPin, GPIO.FALLING, callback=self.handle_button, bouncetime=200)
+
+        if(self.state == State.STARTUP):
+            self.leds = LEDControl()
+            self.leds.wipe(NEO.Color(0,255,0))
+            self.leds.wipe(NEO.Color(255,255,0))
+            self.leds.wipe(NEO.Color(255,0,0))
+            self.leds.clear()
 
         # main controller loop, simple state machine
         try:
