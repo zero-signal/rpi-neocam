@@ -1,14 +1,16 @@
 rpi-neocam.py
 -------------
 
-Control a Raspberry Pi camera module using a single button attached 
-to an RPi GPIO pin.
+Control a Raspberry Pi camera module and Adafruit Neopixel LEDs 
+using a single button attached to an RPi GPIO pin.
 
 Requirements
 ------------
 
 - python-rpi.gpio
 - python-picamera
+
+- rpi_ws281x (https://github.com/jgarff/rpi_ws281x)
 
 Tested on Python 2.7
 
@@ -31,6 +33,17 @@ currently running sequence.
 - VIDEO mode: Short press extends video capture, Long press aborts
 currently running sequence.
 
+Various animations are displayed using the Neopixels according to the
+currently selected capture mode. A camera flash is simulated using 
+Neopixel sticks set to white color with increased brightness.
+
+This script currently assumes the NeoPixels are configured as follows:
+
+Stick(8) -> Ring(16) -> Stick(8)
+
+It also assumes that the Neopixel string is connected to a PWM capable
+GPIO pin on the Raspberry Pi (currently, hardcoded to pin 18)
+
 Invocation
 ----------
 
@@ -38,19 +51,20 @@ Running the script is simple, with sensible defaults provided for
 most command line options:
 
 ```
-usage: rpi-neocam.py [-h] [-o DIR] [-n N] [-d N] [-l N] [-v] [-V]
+usage: rpi-neocam.py [-h] [-o DIR] [-n N] [-d N] [-l N] [-hf] [-vf] [-v] [-V]
 
 Raspberry Pi Camera and Adafruit NeoPixel controller script.
 
 optional arguments:
-
- -h, --help            show this help message and exit
- -o DIR, --output DIR  Output directory. Default: ~/Pictures.
- -n N, --num N         Number of shots in still mode. Default: 5.
- -d N, --delay N       Delay between shots in still mode. Default: 5.
- -l N, --length N      Length of capture in video mode. Default: 30.
- -v, --verbose         Verbose output
- -V, --version         show program's version number and exit
+  -h, --help            show this help message and exit
+  -o DIR, --output DIR  output directory. Default: ..
+  -n N, --nshots N      number of shots in still mode. Default: 5.
+  -d N, --delay N       delay between shots in still mode. Default: 5.
+  -l N, --length N      length of capture in video mode. Default: 30.
+  -hf, --hflip          horizontally flip camera. Default: False.
+  -vf, --vflip          vertically flip camera. Default: False.
+  -v, --verbose         verbose output
+  -V, --version         show program's version number and exit
 ```
 
 Example:
@@ -64,6 +78,13 @@ command line parameter as follows:
 
 ```
 sudo python rpi-neocam.py -o /home/pi -n 5 -d 1 -l 15 --verbose
+```
+
+Horizontal and vertical flipping of the camera can be enabled by
+supplying the --hflip (or -hf) and --vflip (or -vf) as follows:
+
+```
+sudo python rpi-neocam.py -o /home/pi -n 5 -d 1 -l 15 --hflip --vflip
 ```
 
 License & Copyright
