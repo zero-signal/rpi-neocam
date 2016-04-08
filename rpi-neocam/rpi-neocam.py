@@ -3,7 +3,7 @@
 # rpi-neocam.py
 # ------------- 
 #
-# Version 0.1, March 2016
+# Version 0.2, April 2016
 #
 # Control a Raspberry Pi camera module and Adafruit NeoPixel LEDs
 # using a single button attached to RPi GPIO input pin
@@ -36,7 +36,7 @@ import RPi.GPIO as GPIO
 import picamera as CAM
 import neopixel as NEO
 
-VERSION='0.1'
+VERSION='0.2'
 
 # check whether a given argument is a valid directory
 def is_valid_directory(parser, arg):
@@ -75,6 +75,7 @@ class LEDControl():
 
         self.logger.debug('LEDs initialised.')
 
+    # Performs a wipe of the specifed color along the entire length of strip
     def wipe(self, color):
         for i in range(0,8):
             self.strip.setPixelColor(i, color)
@@ -92,6 +93,7 @@ class LEDControl():
             self.strip.show()
             time.sleep(self.WAIT_MS/1000.0)
 
+    # Performs a wipe of the specified color around the ring section of the strip
     def ringWipe(self, color):
         for i in range(0,8):
             self.strip.setPixelColor(8 + i, color)
@@ -99,6 +101,10 @@ class LEDControl():
             self.strip.show()
             time.sleep(self.WAIT_MS/1000.0)
 
+        time.sleep(0.5)
+        self.clear()
+
+    # Sets the sticks in the strip to the specified color
     def stickSolid(self, color):
         for i in range(0,8):
             self.strip.setPixelColor(i, color)
@@ -108,6 +114,36 @@ class LEDControl():
 
         self.strip.show()
 
+    # Perfoms a 'bounce' animation along the sticks in the strip
+    def stickBounce(self, color):
+        for x in range(0,2):
+            for i in range(0,8):
+                for j in range(0,8):
+                    self.strip.setPixelColor(j, NEO.Color(0,0,0))
+                    self.strip.setPixelColor(24 + j, NEO.Color(0,0,0))
+
+                self.strip.setPixelColor(i, color)
+                self.strip.setPixelColor(24 + i, color)
+
+                self.strip.show()
+
+                time.sleep(self.WAIT_MS/1000.0)
+
+            for i in range(0,8):
+                for j in range(0,8):
+                    self.strip.setPixelColor(8 - j -1, NEO.Color(0,0,0))
+                    self.strip.setPixelColor(self.strip.numPixels() - j - 1, NEO.Color(0,0,0))
+
+                self.strip.setPixelColor(8 - i -1, color)
+                self.strip.setPixelColor(self.strip.numPixels() - i - 1, color)
+
+                self.strip.show()
+
+                time.sleep(self.WAIT_MS/1000.0)
+
+            self.clear()
+
+    # Countdown timer animation using the ring
     def showTimer(self, secs):
             self.clear()
 
@@ -127,6 +163,7 @@ class LEDControl():
             
             self.strip.show()
 
+    # Turns all LEDs off
     def clear(self):
         c = NEO.Color(0,0,0)
         for i in range(self.strip.numPixels()):
@@ -134,23 +171,31 @@ class LEDControl():
 
         self.strip.show()
 
+    # Turn on the flash, using stickSolid, white color, increased brightness
     def flashOn(self):
         self.strip.setBrightness(100)
         self.stickSolid(NEO.Color(255,255,255))
 
+    # Turn off the flash
     def flashOff(self):
         self.stickSolid(NEO.Color(0,0,0))
         self.strip.setBrightness(self.LED_BRIGHTNESS)
    
+    # Performs an animation indicating the start of a still image capture sequence
     def stillStart(self):
         self.ringWipe(NEO.Color(255,0,0))
-        time.sleep(0.5)
-        self.clear()
 
+    # Performs an animation indicating the end of a still image capture sequence
     def stillEnd(self):
         self.ringWipe(NEO.Color(0,255,0))
-        time.sleep(0.5)
-        self.clear()
+
+    # Performs an animation indicating the start of a video capture
+    def videoStart(self):
+        self.stickBounce(NEO.Color(255,0,0))
+
+    # Performs an animation indicating the end of a video capture
+    def videoEnd(self):
+        self.stickBounce(NEO.Color(0,255,0))
 
 # base class for a stoppable thread object
 class StoppableThread(threading.Thread):
@@ -168,10 +213,20 @@ class StoppableThread(threading.Thread):
 # base camera thread providing common functionality between modes
 class CameraThread(StoppableThread):
 
-    def __init__(self, lock, group=None, target=None, name=None, verbose=None):
+    def __init__(self, args, lock, group=None, target=None, name=None, verbose=None):
         super(CameraThread, self).__init__(group=group, target=target, name=name, verbose=verbose)
         self._init = threading.Event()
         self.lock = lock
+
+        if (args.hflip):
+            self.hflip = True
+        else:
+            self.hflip = False
+
+        if (args.vflip):
+            self.vflip = True
+        else:
+            self.vflip = False
 
     def is_init(self):
         return self._init.isSet()
@@ -180,6 +235,13 @@ class CameraThread(StoppableThread):
         self.lock.acquire()
 
         self.camera = CAM.PiCamera()
+
+        # set flip if enabled
+        if(self.hflip):
+            self.camera.hflip = True
+        if(self.vflip):
+            self.camera.vflip = True
+
         self.camera.start_preview()
 
         self.logger = logging.getLogger('rpi-neocam')
@@ -200,13 +262,13 @@ class CameraThread(StoppableThread):
 
 # still camera controller thread
 class StillThread(CameraThread):
-    def __init__(self, lock, output=None, nshots=5, delay=5, group=None, target=None, name=None, verbose=None):
+    def __init__(self, lock, args, group=None, target=None, name=None, verbose=None):
 
-        super(StillThread,self).__init__(lock=lock, group=group, target=target, name=name, verbose=verbose)
+        super(StillThread,self).__init__(args=args, lock=lock, group=group, target=target, name=name, verbose=verbose)
 
-        self.nshots = nshots
-        self.delay  = delay
-        self.output = output
+        self.nshots = args.nshots
+        self.delay  = args.delay
+        self.output = args.output
 
     def capture(self):
         fn = self.output + os.path.sep + self.get_timestamp() + '.jpg'
@@ -252,18 +314,21 @@ class StillThread(CameraThread):
 
 # video camera controller thread
 class VideoThread(CameraThread):
-    def __init__(self, lock, output=None, length=30, group=None, target=None, name=None, verbose=None):
+    def __init__(self, lock, args, group=None, target=None, name=None, verbose=None):
 
-        super(VideoThread,self).__init__(lock=lock, group=group, target=target, name=name, verbose=verbose)
+        super(VideoThread,self).__init__(args=args, lock=lock, group=group, target=target, name=name, verbose=verbose)
 
-        self.length = length
-        self.output = output
+        self.length = args.length
+        self.output = args.output
 
     def increment(self):
         self.length += 5
 
     def run(self):
         logger.debug('Video camera thread running.')
+
+        self.leds = LEDControl()
+        self.leds.videoStart()
 
         if(not self.is_init()):
             self.init()
@@ -282,6 +347,8 @@ class VideoThread(CameraThread):
         self.camera.stop_recording()
 
         logger.info('Generated video %s.' % fn)
+
+        self.leds.videoEnd()
 
         self.close()
         logger.debug('Video camera thread completed.')
@@ -305,8 +372,8 @@ class Controller():
         self.lock = threading.Lock()
 
         self.threads = { 
-            'st' : StillThread(name='StillThread', lock=self.lock, output=self.args.output, nshots=self.args.num, delay=self.args.delay), 
-            'vt' : VideoThread(name='VideoThread', lock=self.lock, output=self.args.output, length=self.args.length),
+            'st' : StillThread(name='StillThread', lock=self.lock, args=self.args),
+            'vt' : VideoThread(name='VideoThread', lock=self.lock, args=self.args)
             }
 
         threading.current_thread().name = 'CntrlThread'
@@ -376,9 +443,10 @@ class Controller():
 
         if(self.state == State.STARTUP):
             self.leds = LEDControl()
-            self.leds.wipe(NEO.Color(0,255,0))
-            self.leds.wipe(NEO.Color(255,255,0))
-            self.leds.wipe(NEO.Color(255,0,0))
+
+            for color in [NEO.Color(0,255,0),NEO.Color(255,255,0),NEO.Color(255,0,0)]:
+                self.leds.wipe(color)
+
             self.leds.clear()
 
         # main controller loop, simple state machine
@@ -399,10 +467,10 @@ class Controller():
                 for thread in self.threads.itervalues():
                     if(thread.name == 'StillThread'):
                         if ((self.state == State.IDLE) and thread.is_init()):
-                            self.threads['st'] = StillThread(name='StillThread', lock=self.lock, output=self.args.output, nshots=self.args.num, delay=self.args.delay)
+                            self.threads['st'] = StillThread(name='StillThread', lock=self.lock, args=self.args)
                     if(thread.name == 'VideoThread'):
                         if ((self.state == State.IDLE) and thread.is_init()):
-                            self.threads['vt'] = VideoThread(name='VideoThread', lock=self.lock, output=self.args.output, length=self.args.length)
+                            self.threads['vt'] = VideoThread(name='VideoThread', lock=self.lock, args=self.args)
                 time.sleep(0.01)
 
         # clean up rpi-gpio
@@ -416,10 +484,12 @@ if __name__ == '__main__':
 
     # argument parsing
     parser = argparse.ArgumentParser(description='Raspberry Pi Camera and Adafruit NeoPixel controller script.')
-    parser.add_argument('-o', '--output', dest='output', default='~/Pictures', metavar='DIR', help='output directory. Default: %(default)s.', type=lambda x: is_valid_directory(parser, x))
-    parser.add_argument('-n', '--num', dest='num', default=5, type=int, metavar='N', help='number of shots in still mode. Default: %(default)i.')
+    parser.add_argument('-o', '--output', dest='output', default='.', metavar='DIR', help='output directory. Default: %(default)s.', type=lambda x: is_valid_directory(parser, x))
+    parser.add_argument('-n', '--nshots', dest='nshots', default=5, type=int, metavar='N', help='number of shots in still mode. Default: %(default)i.')
     parser.add_argument('-d', '--delay', dest='delay', default=5, type=int, metavar='N', help='delay between shots in still mode. Default: %(default)i.')
     parser.add_argument('-l', '--length', dest='length', default=30, type=int, metavar='N', help='length of capture in video mode. Default: %(default)i.')
+    parser.add_argument('-hf', '--hflip', dest='hflip', action='store_true', required=False, default=False, help='horizontally flip camera. Default: False.')
+    parser.add_argument('-vf', '--vflip', dest='vflip', action='store_true', required=False, default=False, help='vertically flip camera. Default: False.')
     parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='verbose output')
     parser.add_argument('-V', '--version', action='version', version='%(prog)s ' + VERSION)
 
@@ -445,7 +515,7 @@ if __name__ == '__main__':
 
     # make sure num shots is in range
     # min 1, max 60
-    if(not args.num in range(1,61)):
+    if(not args.nshots in range(1,61)):
         logger.error('Invalid number of shots specified.')
         sys.exit(1)
 
